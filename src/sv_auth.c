@@ -270,7 +270,7 @@ static void Auth_SetAdmin_f() {
 }
 
 
-
+#ifdef COD4X17A
 
 void Auth_SetAdminWithPassword_f( void ){
 
@@ -349,6 +349,7 @@ void Auth_SetAdminWithPassword_f( void ){
 	NV_ProcessEnd();
 }
 
+#endif
 
 void Auth_UnsetAdmin_f( void ){
 
@@ -521,7 +522,9 @@ void Auth_ChangeOwnPassword_f()
 void Auth_ClearAdminList( )
 {
     Com_Memset(auth_admins.admins, 0, sizeof(auth_admins.admins));
+#ifdef COD4X17A
     auth_admins.maxUID = 300000000;
+#endif
 }
 
 qboolean Auth_AddAdminToList(const char* username, const char* password, const char* salt, int power, int uid){
@@ -578,9 +581,10 @@ qboolean Auth_AddAdminToList(const char* username, const char* password, const c
 	{
 		free->power = power;
 	}
+#ifdef COD4X17A
 	if(uid > auth_admins.maxUID && uid < 400000000)
 	    auth_admins.maxUID = uid;
-	
+#endif
 	return qtrue;
 }
 
@@ -681,7 +685,9 @@ void Auth_Init()
 
 	Cmd_AddPCommand("AdminRemoveAdmin", Auth_UnsetAdmin_f, 95);
 	Cmd_AddPCommand("AdminAddAdmin", Auth_SetAdmin_f, 95);
+#ifdef COD4X17A
 	Cmd_AddPCommand("AdminAddAdminWithPassword", Auth_SetAdminWithPassword_f, 95);
+#endif
 	Cmd_AddPCommand("AdminListAdmins", Auth_ListAdmins_f, 80);
 	Cmd_AddPCommand("AdminChangePassword", Auth_ChangePasswordByMasterAdmin_f, 95);
 	Cmd_AddPCommand("AdminChangeCommandPower", Auth_SetCommandPower_f, 98);

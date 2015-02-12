@@ -266,8 +266,11 @@ P_P_F void Plugin_SetPlayerUID(unsigned int clientslot, unsigned int uid)
     client_t *cl;
     int PID = PHandler_CallerID();
 	mvabuf;
-
-    if(clientslot > sv_maxclients->integer)
+#ifndef COD4X17A	
+	Com_PrintError("Plugin_SetPlayerUID: This command is in CoD4X18+ deprecated. Nothing is set\n");
+    return;
+#endif
+	if(clientslot > sv_maxclients->integer)
     {
         PHandler_Error(PID,P_ERROR_DISABLE, va("Plugin tried to set UID for bad client: %d\n", clientslot));
     }

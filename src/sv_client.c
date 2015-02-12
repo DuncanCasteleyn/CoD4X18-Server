@@ -41,6 +41,9 @@
 #include "hl2rcon.h"
 #include "sv_auth.h"
 
+#ifndef COD4X17A
+#include "sapi.h"
+#endif
 
 #include <stdint.h>
 #include <stdarg.h>
@@ -501,7 +504,7 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 #ifdef COD4X17A
 	Q_strncpyz(pbguid, svse.challenges[c].pbguid, sizeof(pbguid));
 #else
-	Q_strncpyz(pbguid, Info_ValueForKey( userinfo, "pbguid" ), sizeof(pbguid));
+	Q_strncpyz(pbguid, /*Info_ValueForKey( userinfo, "pbguid" )*/"[I:0:0]", sizeof(pbguid));
 #endif
 
 
@@ -560,7 +563,7 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 		
 	}else
 #endif
-	if(strlen(pbguid) < 10)
+	if(strlen(pbguid) < 7)
 	{
 		NET_OutOfBandPrint( NS_SERVER, from, "error\nConnection rejected: No or invalid GUID found/provided.\n" );
 		Com_Printf("Rejected a connection: No or invalid GUID found/provided. Length: %i\n",
@@ -953,26 +956,34 @@ void SV_UserinfoChanged( client_t *cl ) {
 	int	i;
 	int	len;
 
-	// name for C code
-	Q_strncpyz( cl->name, Info_ValueForKey (cl->userinfo, "name"), sizeof(cl->name) );
-
-	if(!Q_isprintstring(cl->name) || strstr(cl->name,"ID_") || strstr(cl->name,"///") || Q_PrintStrlen(cl->name) < 3){
-		if(cl->state == CS_ACTIVE){
-			if(!Q_isprintstring(cl->name)) SV_SendServerCommand(cl, "c \"^5Playernames can not contain advanced ASCII-characters\"");
-			if(strlen(cl->name) < 3) SV_SendServerCommand(cl, "c \"^5Playernames can not be shorter than 3 characters\"");
+#ifndef COD4X17A	
+	if(cl->state == CS_CONNECTED)
+	{
+#endif
+		// name for C code
+		Q_strncpyz( cl->name, Info_ValueForKey (cl->userinfo, "name"), sizeof(cl->name) );	
+		if(!Q_isprintstring(cl->name) || strstr(cl->name,"ID_") || strstr(cl->name,"///") || Q_PrintStrlen(cl->name) < 3){
+			if(cl->state == CS_ACTIVE){
+				if(!Q_isprintstring(cl->name)) SV_SendServerCommand(cl, "c \"^5Playernames can not contain advanced ASCII-characters\"");
+				if(strlen(cl->name) < 3) SV_SendServerCommand(cl, "c \"^5Playernames can not be shorter than 3 characters\"");
+			}
+			if(cl->uid <= 0){
+				Com_sprintf(cl->name, 16, "CID_%i", cl - svs.clients);
+				cl->usernamechanged = UN_NEEDUID;
+			} else {
+				Com_sprintf(cl->name, 16, "ID_%i:%i", cl->uid / 100000000, cl->uid % 100000000);
+				cl->usernamechanged = UN_OK;
+			}
+			Info_SetValueForKey( cl->userinfo, "name", cl->name);
+		}else{
+			cl->usernamechanged = UN_VERIFYNAME;
 		}
-		if(cl->uid <= 0){
-		    Com_sprintf(cl->name, 16, "CID_%i", cl - svs.clients);
-		    cl->usernamechanged = UN_NEEDUID;
-		} else {
-		    Com_sprintf(cl->name, 16, "ID_%i:%i", cl->uid / 100000000, cl->uid % 100000000);
-		    cl->usernamechanged = UN_OK;
-		}
-		Info_SetValueForKey( cl->userinfo, "name", cl->name);
+		Q_strncpyz(cl->shortname, cl->name, sizeof(cl->shortname));
+#ifndef COD4X17A	
 	}else{
-	    cl->usernamechanged = UN_VERIFYNAME;
+		Info_SetValueForKey( cl->userinfo, "name", cl->name);
 	}
-	Q_strncpyz(cl->shortname, cl->name, sizeof(cl->shortname));
+#endif
 	// rate command
 	// if the client is on the same subnet as the server and we aren't running an
 	// internet public server, assume they don't need a rate choke
@@ -1119,6 +1130,10 @@ __cdecl void SV_DropClient( client_t *drop, const char *reason ) {
 
 	if(!reason)
 		reason = "Unknown reason for dropping";
+
+#ifndef COD4X17A
+	SV_NotifySApiDisconnect(drop);
+#endif
 
 	if(!Q_stricmp(reason, "silent")){
 		//Just disconnect him and don't tell anyone about it
@@ -1641,9 +1656,18 @@ void SV_SetUid(unsigned int clnum, unsigned int uid){
 
     if(clnum > 63)
         return;
-
+	
     client_t *cl = &svs.clients[clnum];
 
+#ifndef COD4X17A
+	if(cl->uid == 0)
+	{
+		Com_PrintError("setUid: This command is in CoD4X18+ deprecated. The requested UID got still set but conflicts can arise. This function will work for limited time only\n");
+	}else{
+		Com_PrintError("setUid: This command is in CoD4X18+ deprecated. The requested UID got not set as the player has already an UID\n");
+		return;
+	}
+#endif
     if(cl->state < CS_CONNECTED)
     {
         return;
@@ -1913,9 +1937,12 @@ void SV_SendClientGameState( client_t *client ) {
 		Com_Memset(client->stats, 0, sizeof(client->stats));
 		client->receivedstats = 127;
 	}
+
+#else
+	if(!SV_ConnectSApi(client)){
+		return;
+	}
 #endif
-
-
 	SV_SetServerStaticHeader();
 
 	if(client->state < CS_PRIMED)
@@ -1927,7 +1954,7 @@ void SV_SendClientGameState( client_t *client ) {
 	Com_DPrintf( "Going from CS_CONNECTED to CS_PRIMED for %s\n", client->name );
 	client->state = CS_PRIMED;
 	client->pureAuthentic = 0;
-
+	
 	// when we receive the first packet from the client, we will
 	// notice that it is from a different serverid and that the
 	// gamestate message was not just sent, forcing a retransmit
@@ -2014,7 +2041,7 @@ Parse a client packet
 __optimize3 __regparm2 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 	int c, clnum;
 	int serverId;
-	static const char *clc_strings[256] = { "clc_move", "clc_moveNoDelta", "clc_clientCommand", "clc_EOF", "clc_nop"};
+	static const char *clc_strings[256] = { "clc_move", "clc_moveNoDelta", "clc_clientCommand", "clc_EOF", "clc_nop", "clc_sApiData"};
 
 
 	msg_t decompressMsg;
@@ -2058,7 +2085,10 @@ __optimize3 __regparm2 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) 
 				{
 					if ( !SV_ClientCommand( cl, &decompressMsg, 1 ) || cl->state == CS_ZOMBIE)
 						return; // we couldn't execute it because of the flood protection
-
+#ifndef COD4X17A				
+				}else if(c == clc_steamData){
+					SV_SApiData( cl, &decompressMsg );
+#endif
 				}else{
 
 					break;
@@ -2095,7 +2125,6 @@ __optimize3 __regparm2 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) 
 				if ( !SV_ClientCommand( cl, &decompressMsg, 0 ) || cl->state == CS_ZOMBIE ) {
 					return; // we couldn't execute it because of the flood protection
 				}
-
 		}else{
 
 			break;
@@ -2721,3 +2750,4 @@ client_t* SV_ReadPackets(netadr_t *from, unsigned int qport)
 	}
 	return NULL;
 }
+

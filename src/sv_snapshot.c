@@ -521,7 +521,7 @@ void SV_BeginClientSnapshot(client_t *client, msg_t *msg)
 	
 	MSG_WriteLong( msg, client->lastClientCommand );
 	
-	if ( client->state == CS_ACTIVE || client->state == CS_ZOMBIE )
+	if ( client->state >= CS_CONNECTED || client->state == CS_ZOMBIE )
 		SV_UpdateServerCommandsToClient( client, msg );
 }
 
