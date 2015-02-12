@@ -436,7 +436,10 @@ char* SV_PlayerIsBanned(int uid, char* pbguid, netadr_t *addr, char* message, in
   this = banlist;
   if(!this)
         return NULL;
-
+	
+  if(pbguid && strcmp(pbguid, "[I:0:0]") == 0){
+	  return NULL;
+  }
 
   appealmsg[0] = '\0';
 

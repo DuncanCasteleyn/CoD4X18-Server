@@ -66,7 +66,7 @@ enum svc_ops_e {
 	svc_serverCommand,          // [string] to be executed by client game module
 	svc_download,               // [short] size [size bytes]
 	svc_snapshot,
-	svc_EOF,
+	svc_EOF
 };
 
 
@@ -79,7 +79,8 @@ enum clc_ops_e {
 	clc_moveNoDelta,        // [[usercmd_t]
 	clc_clientCommand,      // [string] message
 	clc_EOF,
-	clc_nop
+	clc_nop,
+	clc_steamData
 };
 
 #endif

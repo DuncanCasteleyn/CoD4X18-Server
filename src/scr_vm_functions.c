@@ -96,14 +96,18 @@ Sets the players Uid.
 Usage: int = self setUid(uid <integer>);
 ============
 */
-
+#ifdef COD4X17A
+	#define SCRIPT_UID_OFFSET 100000000
+#else
+	#define SCRIPT_UID_OFFSET 1000000000
+#endif
 void PlayerCmd_SetUid(scr_entref_t arg){
 
     gentity_t* gentity;
     int entityNum = 0;
-    int uid;
+    unsigned int uid;
     mvabuf;
-
+	qboolean useoffset;
 
     if(HIWORD(arg)){
 
@@ -118,20 +122,28 @@ void PlayerCmd_SetUid(scr_entref_t arg){
             Scr_ObjectError(va("Entity: %i is not a player", entityNum));
         }
     }
-    if(Scr_GetNumParam() != 1){
+	if(Scr_GetNumParam() == 2)
+	{
+		useoffset = Scr_GetInt(1);
+	}else if(Scr_GetNumParam() != 1){
         Scr_Error("Usage: self setUid(<integer>)\n");
+		useoffset = qfalse;
     }
-
+	
     uid = Scr_GetInt(0);
+	if(useoffset == qfalse)
+	{
+		if(uid >= 100000000)
+		{
+			Scr_Error("setUid: has to be in range between 0 and 9999999\n");
+		}
 
-    if(uid >= 10000000)
-    {
-        Scr_Error("setUid: has to be in range between 0 and 9999999\n");
-    }
-
-    SV_SetUid(entityNum, uid + 100000000);
-
-    Scr_AddInt( uid + 100000000 );
+		SV_SetUid(entityNum, uid + SCRIPT_UID_OFFSET);
+		Scr_AddInt( uid + SCRIPT_UID_OFFSET );
+	}else{
+		SV_SetUid(entityNum, uid);
+		Scr_AddInt( uid );
+	}
 }
 
 

@@ -28,6 +28,8 @@
 #include "entity.h"
 #include "q_math.h"
 
+#include <stdint.h>
+
 typedef struct snapshotInfo_s{
 	int clnum;
 	struct client_t* cl;
@@ -83,6 +85,8 @@ void MSG_WriteDeltaEntity(struct snapshotInfo_s* snap, msg_t* msg, int time, ent
 void MSG_WriteBit0( msg_t *msg ) ;
 int MSG_WriteBitsNoCompress( int d, byte* src, byte* dst , int size);
 void MSG_WriteVector( msg_t *msg, vec3_t c );
+void MSG_WriteInt64(msg_t *msg, int64_t c);
+int64_t MSG_ReadInt64( msg_t *msg );
 
 
 void MSG_WriteBit1(msg_t*);

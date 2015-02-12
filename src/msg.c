@@ -182,6 +182,19 @@ void MSG_WriteLong( msg_t *msg, int c ) {
 	msg->cursize += sizeof(int32_t);
 }
 
+void MSG_WriteInt64(msg_t *msg, int64_t c)
+{
+	int64_t *dst;
+
+	if ( msg->maxsize - msg->cursize < sizeof(int64_t) ) {
+		msg->overflowed = qtrue;
+		return;
+	}
+	dst = (int64_t*)&msg->data[msg->cursize];
+	*dst = c;
+	msg->cursize += sizeof(int64_t);
+}
+
 void MSG_WriteFloat( msg_t *msg, float c ) {
 	float *dst;
 
@@ -373,7 +386,7 @@ int MSG_ReadByte( msg_t *msg ) {
 	byte	*c;
 
 	if ( msg->readcount+sizeof(byte) > msg->cursize ) {
-		//msg->readcount += sizeof(byte); /* Hmm what a bad bug is this ? O_o*/
+		msg->overflowed = 1;
 		return -1;
 	}
 	c = &msg->data[msg->readcount];
@@ -386,7 +399,7 @@ int MSG_ReadShort( msg_t *msg ) {
 	signed short	*c;
 
 	if ( msg->readcount+sizeof(short) > msg->cursize ) {
-		//msg->readcount += sizeof(short); /* Hmm what a bad bug is this ? O_o*/
+		msg->overflowed = 1;
 		return -1;
 	}	
 	c = (short*)&msg->data[msg->readcount];
@@ -395,11 +408,11 @@ int MSG_ReadShort( msg_t *msg ) {
 	return *c;
 }
 
-int MSG_ReadLong( msg_t *msg ) {
+int32_t MSG_ReadLong( msg_t *msg ) {
 	int32_t		*c;
 
 	if ( msg->readcount+sizeof(int32_t) > msg->cursize ) {
-		//msg->readcount += sizeof(int32_t); /* Hmm what a bad bug is this ? O_o*/
+		msg->overflowed = 1;
 		return -1;
 	}	
 	c = (int32_t*)&msg->data[msg->readcount];
@@ -408,6 +421,21 @@ int MSG_ReadLong( msg_t *msg ) {
 	return *c;
 
 }
+
+int64_t MSG_ReadInt64( msg_t *msg ) {
+	int64_t		*c;
+
+	if ( msg->readcount+sizeof(int64_t) > msg->cursize ) {
+		msg->overflowed = 1;
+		return -1;
+	}	
+	c = (int64_t*)&msg->data[msg->readcount];
+
+	msg->readcount += sizeof(int64_t);
+	return *c;
+
+}
+
 /*
 int MSG_SkipToString( msg_t *msg, const char* string ) {
 	byte c;

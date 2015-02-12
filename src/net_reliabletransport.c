@@ -1,17 +1,15 @@
-#ifndef COD4X17A
 #include "q_shared.h"
 #include "qcommon.h"
-#include "msg.h"
-#include "sys_net.h"
 
 #define MAX_PACKETLEN           1400        // max size of a network packet
+#define MAX_FRAGMENT_SIZE         ( MAX_PACKETLEN - 200 )
 #define DEFAULT_BUFFER_SIZE		32
 
+#include "sys_net.h"
+#include "msg.h"
 #include "net_reliabletransport.h"
 #include <string.h>
 #include <stdlib.h>
-
-
 
 
 int ReliableMessagesGetAcknowledge(framedata_t *frame)
@@ -78,6 +76,7 @@ void ReliableMessageWriteSelectiveAcklist(framedata_t *frame, msg_t* msg)
 //This function sends one new sequence
 void ReliableMessagesTransmitNextFragment(netreliablemsg_t *chan)
 {
+	return;
 	int sequence;
 	msg_t buf;
 	byte data[MAX_PACKETLEN];
@@ -143,7 +142,7 @@ void ReliableMessagesTransmitNextFragment(netreliablemsg_t *chan)
 
 //Assuming you have already read the port
 void ReliableMessagesReceiveNextFragment(netreliablemsg_t *chan, msg_t* buf)
-{
+{	return;
 	int sequence, acknowledge;
 	unsigned int numselectiveack, windowsize, fragmentsize, length, startack;
 	int i, j;
@@ -160,7 +159,6 @@ void ReliableMessagesReceiveNextFragment(netreliablemsg_t *chan, msg_t* buf)
 	//if fragment out of window size?
 	if(sequence >= chan->rxwindow.sequence + chan->rxwindow.windowsize)
 	{
-		Com_PrintError("Illegible sequence - got: %d max: %d\n", sequence, chan->rxwindow.sequence + chan->rxwindow.windowsize);
 		return;
 	}
 	if(acknowledge > chan->txwindow.acknowledge + chan->txwindow.windowsize)
@@ -233,7 +231,7 @@ void ReliableMessagesReceiveNextFragment(netreliablemsg_t *chan, msg_t* buf)
 
 
 int ReliableMessageReceive(netreliablemsg_t *chan, byte* outdata, int len)
-{
+{	return 0;
 	int hisequence, losequence;
 	int numfragments, maxfragmentsout;
 	int i, index, writepos;
@@ -244,7 +242,6 @@ int ReliableMessageReceive(netreliablemsg_t *chan, byte* outdata, int len)
 	
 	hisequence = ReliableMessagesGetAcknowledge(&chan->rxwindow);
 	losequence = chan->rxwindow.sequence;
-	
 	maxfragmentsout = len / MAX_FRAGMENT_SIZE;
 	numfragments = hisequence - losequence;
 	
@@ -272,7 +269,7 @@ int ReliableMessageReceive(netreliablemsg_t *chan, byte* outdata, int len)
 
 
 int ReliableMessageSend(netreliablemsg_t *chan, byte* indata, int len)
-{
+{	return 0;
 	int usedfragmentcnt, freefragmentcnt;
 	int sentlen;
 	int i, index, slen;
@@ -313,8 +310,90 @@ int ReliableMessageSend(netreliablemsg_t *chan, byte* indata, int len)
 }
 
 
+int ReliableMessageGetUsedSendBufferSize(netreliablemsg_t *chan)
+{	return 0;
+	int usedfragmentcnt;
+	
+	if(chan->remoteAddress.type <= NA_BAD){
+		return 0;
+	}
+	
+	usedfragmentcnt = chan->txwindow.sequence - chan->txwindow.acknowledge;
+	return usedfragmentcnt;
+}
+
+
+int ReliableMessageChangeSendBufferSize(netreliablemsg_t *chan, int newfragmentcount)
+{	return 0;
+	fragment_t *newfrags, *oldfrags;
+	int i, sindex, dindex;
+	
+	if(chan->remoteAddress.type <= NA_BAD){
+		return -1;
+	}
+	
+	int inusefragments = ReliableMessageGetUsedSendBufferSize(chan);
+	
+	if(inusefragments >= newfragmentcount)
+	{
+		return -1;
+	}
+	newfrags = malloc(newfragmentcount * sizeof(fragment_t));
+	if(newfrags == NULL)
+	{
+		return -1;
+	}
+	
+	oldfrags = chan->txwindow.fragments;
+
+	if(chan->txwindow.acknowledge == 0)
+	{
+		for(i = 0; i < newfragmentcount; ++i)
+		{
+			newfrags[i].ack = -1;
+		}
+	}
+	
+	for(i = chan->txwindow.acknowledge; i < chan->txwindow.sequence; ++i)
+	{	
+		sindex = i % chan->txwindow.bufferlen;
+		dindex = i % newfragmentcount;
+		
+		if(oldfrags[sindex].len > MAX_FRAGMENT_SIZE)
+		{
+			oldfrags[sindex].len = MAX_FRAGMENT_SIZE;
+		}else if(oldfrags[sindex].len < 0){
+			oldfrags[sindex].len = 1;
+		}	
+		memcpy(newfrags[dindex].data, oldfrags[sindex].data, oldfrags[sindex].len);
+		newfrags[dindex].len = oldfrags[sindex].len;
+		newfrags[dindex].ack = oldfrags[sindex].ack;
+		newfrags[dindex].packetnum = oldfrags[sindex].packetnum;
+		newfrags[dindex].senttime = oldfrags[sindex].senttime;
+	}
+	
+	free(oldfrags);
+	chan->txwindow.fragments = newfrags;	
+	
+	chan->txwindow.bufferlen = newfragmentcount;
+	return chan->txwindow.bufferlen;
+}
+
+int ReliableMessageGetAvailableSendBufferSize(netreliablemsg_t *chan)
+{	return 0;
+	int usedfragmentcnt, freefragmentcnt;
+	
+	if(chan->remoteAddress.type <= NA_BAD){
+		return 0;
+	}
+	
+	usedfragmentcnt = chan->txwindow.sequence - chan->txwindow.acknowledge;
+	freefragmentcnt = chan->txwindow.bufferlen - usedfragmentcnt;
+	return freefragmentcnt;
+}
+
 void ReliableMessageSetup(netreliablemsg_t *chan, int qport, int netsrc, netadr_t* remote)
-{
+{	return;
 	fragment_t* dynrxmem;
 	fragment_t* dyntxmem;
 	
@@ -345,7 +424,7 @@ void ReliableMessageSetup(netreliablemsg_t *chan, int qport, int netsrc, netadr_
 }
 
 void ReliableMessageDisconnect(netreliablemsg_t *chan)
-{
+{	return;
 	if(chan->txwindow.fragments)
 	{
 		free(chan->txwindow.fragments);
@@ -358,18 +437,17 @@ void ReliableMessageDisconnect(netreliablemsg_t *chan)
 }
 
 void ReliableMessageSetCurrentTime(netreliablemsg_t *chan, int ftime)
-{
+{	return;
 	chan->time = ftime;
 }
 
 
-
 void Net_TestingFunction(netreliablemsg_t *chan)
-{
+{	return;
 	static int testdata[1024*1024*16];
 	int recvdata[8192];
 	static int sendpos;
-	int i, numbytes;
+	int i;
 	static int verify = 1;
 	
 	if(chan->remoteAddress.type <= NA_BAD)
@@ -381,17 +459,14 @@ void Net_TestingFunction(netreliablemsg_t *chan)
 		{
 			testdata[i] = i +1;
 		}
-	}
+		
+		//sendpos += ReliableMessageSend(chan, ((byte*)testdata) + sendpos, sizeof(testdata) - sendpos);
 
-	numbytes = ReliableMessageSend(chan, ((byte*)testdata) + sendpos, sizeof(testdata) - sendpos);
-	sendpos += numbytes;
-	if(numbytes > 0)
-		Com_Printf("Sent %d new bytes\n", numbytes);
+	}
 	
-	numbytes = ReliableMessageReceive(chan, (byte*)recvdata, sizeof(recvdata));
+	int numbytes = ReliableMessageReceive(chan, (byte*)recvdata, sizeof(recvdata));
 	if(numbytes > 0)
-		Com_Printf("Received %d bytes\n", numbytes);
-	
+	Com_Printf("Received %d bytes\n", numbytes);
 	/*
 	for(i = 0; i < (numbytes/4); ++i){
 		Com_Printf("%d ", recvdata[i]);
@@ -407,5 +482,5 @@ void Net_TestingFunction(netreliablemsg_t *chan)
 			Com_Printf("Verify error! Expected: %d Got: %d\n", verify, recvdata[i]);	
 		}
 	}
+	
 }
-#endif

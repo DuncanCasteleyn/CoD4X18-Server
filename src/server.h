@@ -166,7 +166,12 @@ typedef struct client_s {//90b4f8c
 #else
 	netreliablemsg_t relmsg;
 #endif	
-	byte			free[518];
+	uint64_t		steamid;
+	uint64_t		steamidPending;
+	int				steamAuthenticated; //0 = nothing has been arrived yet; -1 = Client auth token has arrived; 1 = Steam auth completed; 2 = User has license as well
+	unsigned int	steamNextAuthAttempt;
+	unsigned int	steamAuthNumAttempts;
+	byte			free[490];
 
 	char			name[64];
 
@@ -803,6 +808,7 @@ __cdecl void SV_WriteSnapshotToClient(client_t* client, msg_t* msg);
 __cdecl void SV_ClipMoveToEntity(struct moveclip_s *clip, svEntity_t *entity, struct trace_s *trace);
 void SV_Cmd_Init();
 void SV_CopyCvars();
+void SV_SteamData(client_t* cl, msg_t* msg);
 
 #ifdef COD4X18UPDATE
 void SV_ConnectWithUpdateProxy(client_t *cl);

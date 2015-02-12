@@ -43,6 +43,10 @@
 #include "nvconfig.h"
 #include "hl2rcon.h"
 
+#ifndef COD4X17A
+#include "sapi.h"
+#endif
+
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -2618,21 +2622,24 @@ void SV_InitCvarsOnce(void){
 	sv_debugReliableCmds = Cvar_RegisterBool("sv_debugReliableCmds", qfalse, 0, "Enable debugging information for reliable commands");
 	sv_clientArchive = Cvar_RegisterBool("sv_clientArchive", qtrue, 0, "Have the clients archive data to save bandwidth on the server");
 	sv_shownet = Cvar_RegisterInt("sv_shownet", -1, -1, 63, 0, "Enable network debugging for a client");
+	
 }
 
 
 
 
 void SV_Init(){
-
-        SV_AddSafeCommands();
-        SV_InitCvarsOnce();
-        SVC_RateLimitInit( );
-        SV_InitBanlist();
-        Init_CallVote();
-        SV_InitServerId();
-        Com_RandomBytes((byte*)&psvs.randint, sizeof(psvs.randint));
-
+		
+    SV_AddSafeCommands();
+    SV_InitCvarsOnce();
+    SVC_RateLimitInit( );
+    SV_InitBanlist();
+    Init_CallVote();
+    SV_InitServerId();
+    Com_RandomBytes((byte*)&psvs.randint, sizeof(psvs.randint));
+#ifndef COD4X17A	
+	SV_InitSApi();
+#endif
 }
 
 
@@ -3458,7 +3465,6 @@ __optimize3 __regparm1 qboolean SV_Frame( unsigned int usec ) {
     static qboolean underattack = qfalse;
 	mvabuf;
 
-
 	if ( !com_sv_running->boolean ) {
 		usleep(20000);
 		return qtrue;
@@ -3494,7 +3500,7 @@ __optimize3 __regparm1 qboolean SV_Frame( unsigned int usec ) {
 		NET_Clear();
 
 	SV_PreFrame( );
-
+	
 	// run the game simulation in chunks
 	while ( sv.timeResidual >= frameUsec ) {
 		sv.timeResidual -= frameUsec;
@@ -3517,6 +3523,11 @@ __optimize3 __regparm1 qboolean SV_Frame( unsigned int usec ) {
 
 	// send a heartbeat to the master if needed
 	SV_MasterHeartbeat( HEARTBEAT_GAME );
+	
+#ifndef COD4X17A
+	SV_RunSApiFrame();
+#endif
+	
 #ifdef PUNKBUSTER
 	PbServerProcessEvents( 0 );
 #endif
@@ -3602,7 +3613,6 @@ __optimize3 __regparm1 qboolean SV_Frame( unsigned int usec ) {
 		return qtrue;
 	}
 	SetAnimCheck(com_animCheck->boolean);
-
 
         if( svs.time > svse.frameNextSecond){	//This runs each second
 	    svse.frameNextSecond = svs.time+1000;
@@ -3735,3 +3745,4 @@ void SV_ShowClientUnAckCommands( client_t *client )
 	
 	Com_Printf("-----------------------------------------------------\n");
 }
+
