@@ -1,4 +1,4 @@
-CoD4X17a_testing
+CoD4X18-Server
 ================
 
 A custom dedicated server for the Call of Duty 4 game.
