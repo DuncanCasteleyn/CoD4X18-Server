@@ -1280,12 +1280,9 @@ void RuntimeError_Debug(char *msg, char *a3, int a4)
   Com_Printf("^1************************************\n");
 }
 
-
-
 void RuntimeError(char *a3, int arg4, char *message, char *a4)
 {
 	int errtype;
-
 
 	if ( !scrVarPub.field_6 && !scrVmPub.field_16 )
 	{
@@ -1323,5 +1320,18 @@ void RuntimeError(char *a3, int arg4, char *message, char *a4)
 	    Com_Error(errtype, "script runtime error\n(see console for details)\n%s", message);
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

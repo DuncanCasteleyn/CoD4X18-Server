@@ -814,7 +814,7 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 #ifdef COD4X17A
 	svse.challenges[c].connected = qtrue;
 #else
-	ReliableMessageSetup(&newcl->relmsg, qport, NS_SERVER, from);
+	SV_SetupReliableMessageProtocol(newcl);
 #endif
 	Com_Printf( "Going from CS_FREE to CS_CONNECTED for %s num %i guid %s from: %s\n", nick, clientNum, newcl->pbguid, NET_AdrToConnectionString(from));
 	
@@ -1123,7 +1123,8 @@ __cdecl void SV_DropClient( client_t *drop, const char *reason ) {
 		}
 	}
 #else
-	ReliableMessageDisconnect(&drop->relmsg);
+	SV_DisconnectReliableMessageProtocol(drop);
+
 #endif
 
 	clientnum = drop - svs.clients;
@@ -2750,4 +2751,176 @@ client_t* SV_ReadPackets(netadr_t *from, unsigned int qport)
 	}
 	return NULL;
 }
+
+void SV_RelocateReliableMessageProtocolBuffer(msg_t* msg, int newsize)
+{
+
+	byte* newbuffer;
+	if(msg->cursize > newsize)
+	{
+		newsize = msg->cursize;
+	}
+	newbuffer = Z_Malloc(newsize);
+
+	if(newbuffer == NULL)
+	{
+		return;
+	}
+	if(msg->data != NULL)
+	{
+		memcpy(newbuffer, msg->data, msg->cursize);
+		Z_Free(msg->data);
+	}
+	MSG_Init(msg, newbuffer, newsize);
+
+}
+
+void SV_ExecuteReliableMessages(client_t* client)
+{
+	int dataint;
+	static int verify = 0;
+
+	msg_t* msg = &client->reliablemsg.recvbuffer;
+
+	while(msg->readcount < msg->cursize)
+	{
+		dataint = MSG_ReadLong(msg);
+
+		verify++;
+
+		if(dataint != verify)
+		{
+			Com_Printf("Verify error! Expected: %d Got: %d\n", verify, dataint);
+		}
+
+
+/*
+		int command = MSG_ReadBigLong(&msg);
+		int size = MSG_ReadBigLong(&msg);
+
+		msg_t singlemsg;
+
+
+		MSG_Init(&singlemsg, sbuf, sizeof(sbuf));
+
+		if(size >= singlemsg.maxsize){
+			Plugin_Printf("GameRanger Plugin: Oversize message: %d %d\n", command, size);
+			return;
+		}
+
+		MSG_ReadData(&msg, singlemsg.data, size);
+		singlemsg.cursize = size;
+
+		grConn.lastServerCommandID = command;
+		grConn.lastServerPacketLength = size;
+		grConn.serverMessageCounter++;
+
+		MSG_BeginReading(&singlemsg);
+
+//		Plugin_Printf("MSG_Size is: %d Should_Size: %d\n", singlemsg.cursize, size);
+
+	        switch(command)
+		{
+			case 3:
+				GR_RedirectResponse(&singlemsg);
+			default:
+			Plugin_DPrintf("Command: %d\n", command);
+		}
+*/
+	}
+
+}
+
+#define RNET_DEFAULT_BUFFER_SIZE 16*1024
+
+void SV_ReceiveReliableMessages(client_t* client)
+{
+	int messagesize;
+
+
+	msg_t* msg = &client->reliablemsg.recvbuffer;
+
+	if(msg->maxsize < MAX_FRAGMENT_SIZE)
+	{
+		SV_RelocateReliableMessageProtocolBuffer(msg, MAX_FRAGMENT_SIZE);
+	}
+
+	if(msg->cursize > 0)
+	{
+		msg->cursize += ReliableMessageReceive(&client->reliablemsg.netstate, msg->data + msg->cursize, msg->maxsize - msg->cursize);
+	}else{
+		msg->cursize = ReliableMessageReceiveSingleFragment(&client->reliablemsg.netstate, msg->data, msg->maxsize);
+	}
+
+	if(msg->cursize < 1){
+		return;
+	}
+
+
+	MSG_BeginReading(msg);
+
+	messagesize = MSG_ReadLong(msg);
+
+
+	if(msg->cursize < messagesize + 4)
+	{	//Incomplete message
+		if(messagesize + 4 > msg->maxsize)
+		{
+			SV_RelocateReliableMessageProtocolBuffer(msg, messagesize + 4);
+		}
+		return;
+	}
+	/* Doing the important stuff here */
+	SV_ExecuteReliableMessages(client);
+
+	MSG_Clear(msg);
+
+	if(msg->maxsize != RNET_DEFAULT_BUFFER_SIZE)
+	{
+		SV_RelocateReliableMessageProtocolBuffer(msg, RNET_DEFAULT_BUFFER_SIZE);
+	}
+	return;
+}
+
+
+
+/* Note: Netchan has to be setup already before you can do this */
+void SV_SetupReliableMessageProtocol(client_t* client)
+{
+    byte* defaultbuffer;
+    int size;
+
+    size = RNET_DEFAULT_BUFFER_SIZE;
+    defaultbuffer = Z_Malloc(size);
+
+    if(client->netchan.remoteAddress.type == NA_BAD)
+    {
+        Com_Error(ERR_FATAL, "SV_SetupRelibiableMessageProtocol() called without setting up netchan");
+    }
+
+    ReliableMessageSetup(&client->reliablemsg.netstate, client->netchan.sock, client->netchan.qport, &client->netchan.remoteAddress);
+
+    if(defaultbuffer == NULL)
+    {
+        size = 0;
+    }
+
+    MSG_Init(&client->reliablemsg.recvbuffer, defaultbuffer, size);
+
+}
+
+
+/* Note: Netchan has to be setup already before you can do this */
+void SV_DisconnectReliableMessageProtocol(client_t* client)
+{
+	ReliableMessageDisconnect(&client->reliablemsg.netstate);
+	if(client->reliablemsg.recvbuffer.data)
+	{
+		Z_Free(client->reliablemsg.recvbuffer.data);
+	}
+	client->reliablemsg.recvbuffer.data = NULL;
+	client->reliablemsg.recvbuffer.cursize = 0;
+	client->reliablemsg.recvbuffer.maxsize = 0;
+}
+
 

@@ -69,6 +69,13 @@
 #define CLIENT_BASE_ADDR 0x90b4f8C
 
 
+typedef struct{
+	netreliablemsg_t netstate;
+	msg_t recvbuffer;
+}reliableprotocol_t;
+
+
+
 typedef enum {
 	CS_FREE,		// can be reused for a new connection
 	CS_ZOMBIE,		// client has been disconnected, but don't reuse
@@ -162,18 +169,19 @@ typedef struct client_s {//90b4f8c
 	qboolean		needupdate;
 	qboolean		updateconnOK;
 #ifdef COD4X17A
-	byte			dummy767[110];
+	byte			dummy767[150];
 #else
-	netreliablemsg_t relmsg;
-#endif	
+	reliableprotocol_t	reliablemsg;
+#endif
+	msg_t			incommingrmsg;
 	uint64_t		steamid;
 	uint64_t		steamidPending;
 	int				steamAuthenticated; //0 = nothing has been arrived yet; -1 = Client auth token has arrived; 1 = Steam auth completed; 2 = User has license as well
 	unsigned int	steamNextAuthAttempt;
 	unsigned int	steamAuthNumAttempts;
-	byte			free[490];
+	byte			free[410];
 
-	char			name[64];
+	char			name[64];		//0x5fc
 
 	int			unknownUsercmd1;	//0x63c
 	int			unknownUsercmd2;	//0x640
@@ -810,11 +818,16 @@ void SV_Cmd_Init();
 void SV_CopyCvars();
 void SV_SteamData(client_t* cl, msg_t* msg);
 
+void SV_SetupReliableMessageProtocol(client_t* client);
+void SV_DisconnectReliableMessageProtocol(client_t* client);
+void SV_ReceiveReliableMessages(client_t* client);
 #ifdef COD4X18UPDATE
 void SV_ConnectWithUpdateProxy(client_t *cl);
 #endif
 
 #endif
+
+
 
 
 

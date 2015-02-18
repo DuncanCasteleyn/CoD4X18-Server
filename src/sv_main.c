@@ -1934,7 +1934,7 @@ __optimize3 __regparm2 void SV_PacketEvent( netadr_t *from, msg_t *msg ) {
 #ifndef COD4X17A	
 	if(seq == 0xfffffff0)
 	{
-		ReliableMessagesReceiveNextFragment( &cl->relmsg , msg );
+		ReliableMessagesReceiveNextFragment( &cl->reliablemsg.netstate , msg );
 		return;
 	}
 #ifdef COD4X18UPDATE
