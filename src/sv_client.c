@@ -814,7 +814,13 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 #ifdef COD4X17A
 	svse.challenges[c].connected = qtrue;
 #else
-	SV_SetupReliableMessageProtocol(newcl);
+	if(SV_SetupReliableMessageProtocol(newcl) == qfalse)
+	{
+		NET_OutOfBandPrint( NS_SERVER, from, "error\nServer is out of memory\n");
+		Com_Printf("Server is out of memory. Refused to accept client %s\n", newcl->name);
+		SV_FreeClientScriptId(newcl);
+		return;
+	}
 #endif
 	Com_Printf( "Going from CS_FREE to CS_CONNECTED for %s num %i guid %s from: %s\n", nick, clientNum, newcl->pbguid, NET_AdrToConnectionString(from));
 	
@@ -2771,8 +2777,8 @@ void SV_RelocateReliableMessageProtocolBuffer(msg_t* msg, int newsize)
 		memcpy(newbuffer, msg->data, msg->cursize);
 		Z_Free(msg->data);
 	}
-	MSG_Init(msg, newbuffer, newsize);
-
+	msg->data = newbuffer;
+	msg->maxsize = newsize;
 }
 
 void SV_ExecuteReliableMessages(client_t* client)
@@ -2791,6 +2797,7 @@ void SV_ExecuteReliableMessages(client_t* client)
 		if(dataint != verify)
 		{
 			Com_Printf("Verify error! Expected: %d Got: %d\n", verify, dataint);
+			__asm("int $3");
 		}
 
 
@@ -2845,34 +2852,38 @@ void SV_ReceiveReliableMessages(client_t* client)
 		SV_RelocateReliableMessageProtocolBuffer(msg, MAX_FRAGMENT_SIZE);
 	}
 
-	if(msg->cursize > 0)
+	if(msg->cursize < 1)
 	{
-		msg->cursize += ReliableMessageReceive(&client->reliablemsg.netstate, msg->data + msg->cursize, msg->maxsize - msg->cursize);
-	}else{
-		msg->cursize = ReliableMessageReceiveSingleFragment(&client->reliablemsg.netstate, msg->data, msg->maxsize);
+		msg->cursize = ReliableMessageReceive(client->reliablemsg.netstate, msg->data, 4);
 	}
 
 	if(msg->cursize < 1){
 		return;
 	}
 
-
 	MSG_BeginReading(msg);
 
 	messagesize = MSG_ReadLong(msg);
 
+	if(messagesize < 0)
+	{
+		return;
+	}
 
+	Com_Printf("^2Received %d of %d bytes - maxsize: %d\n", msg->cursize, messagesize+4, msg->maxsize);
 	if(msg->cursize < messagesize + 4)
 	{	//Incomplete message
 		if(messagesize + 4 > msg->maxsize)
 		{
 			SV_RelocateReliableMessageProtocolBuffer(msg, messagesize + 4);
+		}else{
+			msg->cursize += ReliableMessageReceive(client->reliablemsg.netstate, msg->data + msg->cursize, (messagesize + 4) - msg->cursize);
 		}
 		return;
 	}
 	/* Doing the important stuff here */
 	SV_ExecuteReliableMessages(client);
-
+	Com_Printf("^2Processed %d bytes\n", msg->cursize -4);
 	MSG_Clear(msg);
 
 	if(msg->maxsize != RNET_DEFAULT_BUFFER_SIZE)
@@ -2885,7 +2896,7 @@ void SV_ReceiveReliableMessages(client_t* client)
 
 
 /* Note: Netchan has to be setup already before you can do this */
-void SV_SetupReliableMessageProtocol(client_t* client)
+qboolean SV_SetupReliableMessageProtocol(client_t* client)
 {
     byte* defaultbuffer;
     int size;
@@ -2898,7 +2909,7 @@ void SV_SetupReliableMessageProtocol(client_t* client)
         Com_Error(ERR_FATAL, "SV_SetupRelibiableMessageProtocol() called without setting up netchan");
     }
 
-    ReliableMessageSetup(&client->reliablemsg.netstate, client->netchan.sock, client->netchan.qport, &client->netchan.remoteAddress);
+    client->reliablemsg.netstate = ReliableMessageSetup(client->netchan.sock, client->netchan.qport, &client->netchan.remoteAddress);
 
     if(defaultbuffer == NULL)
     {
@@ -2907,13 +2918,16 @@ void SV_SetupReliableMessageProtocol(client_t* client)
 
     MSG_Init(&client->reliablemsg.recvbuffer, defaultbuffer, size);
 
+    if(client->reliablemsg.netstate == NULL)
+        return qfalse;
+    return qtrue;
 }
 
 
 /* Note: Netchan has to be setup already before you can do this */
 void SV_DisconnectReliableMessageProtocol(client_t* client)
 {
-	ReliableMessageDisconnect(&client->reliablemsg.netstate);
+	ReliableMessageDisconnect(client->reliablemsg.netstate);
 	if(client->reliablemsg.recvbuffer.data)
 	{
 		Z_Free(client->reliablemsg.recvbuffer.data);
@@ -2921,6 +2935,8 @@ void SV_DisconnectReliableMessageProtocol(client_t* client)
 	client->reliablemsg.recvbuffer.data = NULL;
 	client->reliablemsg.recvbuffer.cursize = 0;
 	client->reliablemsg.recvbuffer.maxsize = 0;
+
+	client->reliablemsg.netstate = NULL;
 }
 
 

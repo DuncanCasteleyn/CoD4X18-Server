@@ -588,8 +588,8 @@ void SV_SendClientMessages( void ) {
 			continue; // not connected
 		}
 #ifndef COD4X17A		
-		ReliableMessageSetCurrentTime(&c->reliablemsg.netstate, svs.time);
-		ReliableMessagesTransmitNextFragment(&c->reliablemsg.netstate);
+		ReliableMessageSetCurrentTime(c->reliablemsg.netstate, svs.time);
+		ReliableMessagesTransmitNextFragment(c->reliablemsg.netstate);
 		SV_ReceiveReliableMessages(c);
 #endif
 		if ( svs.time < c->nextSnapshotTime ) {

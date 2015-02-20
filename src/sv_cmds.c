@@ -1996,11 +1996,11 @@ void SV_ChangeGametype_f()
 void SV_SendTestData_f()
 {
 	client_t* cl = NULL;
-	Com_Printf("Addr: %x\n", &cl->stats);
+	Com_Printf("Addr: %x\n", &cl->name);
 
 	int numbytes = atoi(Cmd_Argv(1));
 
-	ReliableMessageAddTestData(&svs.clients[0].reliablemsg.netstate, numbytes);
+	ReliableMessageAddTestData(svs.clients[0].reliablemsg.netstate, numbytes);
 }
 
 void SV_AddOperatorCommands(){

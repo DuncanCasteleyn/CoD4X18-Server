@@ -16,11 +16,11 @@
 int ReliableMessageGetUsedSendBufferSize(netreliablemsg_t *chan)
 {	
 	int usedfragmentcnt;
-	
-	if(chan->remoteAddress.type <= NA_BAD){
+
+	if(chan == NULL)
+	{
 		return 0;
 	}
-	
 	usedfragmentcnt = chan->txwindow.sequence - chan->txwindow.acknowledge;
 	return usedfragmentcnt;
 }
@@ -31,11 +31,11 @@ int ReliableMessageChangeSendBufferSize(netreliablemsg_t *chan, int newfragmentc
 {	
 	fragment_t *newfrags, *oldfrags;
 	int i, sindex, dindex;
-	
-	if(chan->remoteAddress.type <= NA_BAD){
+
+	if(chan == NULL)
+	{
 		return -1;
 	}
-	
 	int inusefragments = ReliableMessageGetUsedSendBufferSize(chan);
 
 	if(newfragmentcount <= DEFAULT_BUFFER_SIZE)
@@ -161,8 +161,9 @@ void ReliableMessagesTransmitNextFragment(netreliablemsg_t *chan)
 	int sequence;
 	msg_t buf;
 	byte data[MAX_PACKETLEN];
-	
-	if(chan->remoteAddress.type <= NA_BAD){
+
+	if(chan == NULL)
+	{
 		return;
 	}
 	
@@ -234,7 +235,8 @@ void ReliableMessagesReceiveNextFragment(netreliablemsg_t *chan, msg_t* buf)
 	int i, j;
 	int usedfragmentcnt;
 
-	if(chan->remoteAddress.type <= NA_BAD){
+	if(chan == NULL)
+	{
 		return;
 	}
 	
@@ -327,35 +329,52 @@ void ReliableMessagesReceiveNextFragment(netreliablemsg_t *chan, msg_t* buf)
 
 int ReliableMessageReceive(netreliablemsg_t *chan, byte* outdata, int len)
 {	
-	int hisequence, losequence;
-	int numfragments, maxfragmentsout;
-	int i, index, writepos;
+	int hisequence, losequence, wlen;
+	int i, index, writepos, availablefragments;
 	
-	if(chan->remoteAddress.type <= NA_BAD){
+	if(chan == NULL)
+	{
 		return 0;
 	}
 	
 	hisequence = ReliableMessagesGetAcknowledge(&chan->rxwindow);
 	losequence = chan->rxwindow.sequence;
-	maxfragmentsout = len / MAX_FRAGMENT_SIZE;
-	numfragments = hisequence - losequence;
-	
-	if(maxfragmentsout < numfragments)
-	{
-		numfragments = maxfragmentsout;
-	}
-	
+	availablefragments = hisequence - losequence;
+
 	writepos = 0;
-	
-	for(i = 0; i < numfragments; ++i)
+
+	//Do we have cached fragments? So send them first
+	if(len > chan->rxwindow.fragmentbuffer.cursize - chan->rxwindow.fragmentbuffer.readcount)
+	{
+		wlen = chan->rxwindow.fragmentbuffer.cursize - chan->rxwindow.fragmentbuffer.readcount;
+	}else{
+		wlen = len;
+	}
+	memcpy(outdata, chan->rxwindow.fragmentbuffer.data + chan->rxwindow.fragmentbuffer.readcount, wlen);
+	chan->rxwindow.fragmentbuffer.readcount += wlen;
+	writepos += wlen;
+
+	for(i = 0; i < availablefragments && writepos < len; ++i)
 	{
 		index = (chan->rxwindow.sequence + i) % chan->rxwindow.bufferlen;
-		
-		memcpy(outdata + writepos, chan->rxwindow.fragments[index].data, chan->rxwindow.fragments[index].len);
-		writepos += chan->rxwindow.fragments[index].len;
-	}	
-	chan->rxwindow.sequence += numfragments;
-	if(numfragments > 1)
+
+		if(len - writepos > chan->rxwindow.fragments[index].len)
+		{
+			wlen = chan->rxwindow.fragments[index].len;
+		}else{
+			wlen = len - writepos;
+			//Store off what we can not put into the buffer
+			MSG_Clear(&chan->rxwindow.fragmentbuffer);
+			chan->rxwindow.fragmentbuffer.cursize = chan->rxwindow.fragments[index].len - wlen;
+			memcpy(chan->rxwindow.fragmentbuffer.data, chan->rxwindow.fragments[index].data + wlen, chan->rxwindow.fragmentbuffer.cursize);
+
+		}
+		memcpy(outdata + writepos, chan->rxwindow.fragments[index].data, wlen);
+		writepos += wlen;
+	}
+
+	chan->rxwindow.sequence += i;
+	if(i > 1)
 	{
 		chan->rxwindow.selackoffset = 1;
 	}
@@ -364,14 +383,16 @@ int ReliableMessageReceive(netreliablemsg_t *chan, byte* outdata, int len)
 
 
 int ReliableMessageReceiveSingleFragment(netreliablemsg_t *chan, byte* outdata, int len)
-{	
+{
 	int hisequence, losequence;
 	int numfragments;
 	int index;
 	
-	if(chan->remoteAddress.type <= NA_BAD){
+	if(chan == NULL)
+	{
 		return 0;
 	}
+
 	if(len < MAX_FRAGMENT_SIZE)
 	{
 		return 0;
@@ -400,14 +421,15 @@ int ReliableMessageReceiveSingleFragment(netreliablemsg_t *chan, byte* outdata, 
 
 int ReliableMessageSend(netreliablemsg_t *chan, byte* indata, int len)
 {	
-	int usedfragmentcnt, freefragmentcnt, newbuflen;
+	int usedfragmentcnt, freefragmentcnt, newbuflen, newfreefragmentcnt;
 	int sentlen;
 	int i, index, slen;
 	
-	if(chan->remoteAddress.type <= NA_BAD){
+	if(chan == NULL)
+	{
 		return 0;
 	}
-	
+
 	usedfragmentcnt = chan->txwindow.sequence - chan->txwindow.acknowledge;
 	freefragmentcnt = chan->txwindow.bufferlen - usedfragmentcnt;
 	
@@ -421,7 +443,11 @@ int ReliableMessageSend(netreliablemsg_t *chan, byte* indata, int len)
 		newbuflen = len / MAX_FRAGMENT_SIZE + usedfragmentcnt;
 		/* 1.5 * needed size */
 		newbuflen += (newbuflen / 2);
-		freefragmentcnt = ReliableMessageChangeSendBufferSize(chan, newbuflen) - usedfragmentcnt;
+		newfreefragmentcnt = ReliableMessageChangeSendBufferSize(chan, newbuflen) - usedfragmentcnt;
+		if(newfreefragmentcnt > 0)
+		{
+			freefragmentcnt = newfreefragmentcnt;
+		}
 	}
 
 	for(i = 0; i < freefragmentcnt; ++i)
@@ -451,35 +477,47 @@ int ReliableMessageSend(netreliablemsg_t *chan, byte* indata, int len)
 
 
 int ReliableMessageGetAvailableSendBufferSize(netreliablemsg_t *chan)
-{	
+{
 	int usedfragmentcnt, freefragmentcnt;
-	
-	if(chan->remoteAddress.type <= NA_BAD){
+
+	if(chan == NULL)
+	{
 		return 0;
 	}
-	
+
 	usedfragmentcnt = chan->txwindow.sequence - chan->txwindow.acknowledge;
 	freefragmentcnt = chan->txwindow.bufferlen - usedfragmentcnt;
 	return freefragmentcnt;
 }
 
-void ReliableMessageSetup(netreliablemsg_t *chan, int qport, int netsrc, netadr_t* remote)
-{	
+netreliablemsg_t* ReliableMessageSetup( int qport, int netsrc, netadr_t* remote)
+{
 	fragment_t* dynrxmem;
 	fragment_t* dyntxmem;
-	
+	netreliablemsg_t *chan;
+
+	chan = malloc(sizeof(netreliablemsg_t));
+	if(chan == NULL)
+	{
+		Com_PrintError("ReliableMessageSetup(): Out of memory\n");
+		return NULL;
+	}
 	memset(chan, 0, sizeof(netreliablemsg_t));
+
 	dynrxmem = malloc(sizeof(fragment_t) * DEFAULT_BUFFER_SIZE);
 	if(dynrxmem == NULL)
 	{
-		return;
+		free(chan);
+		return NULL;
 	}
 	dyntxmem = malloc(sizeof(fragment_t) * DEFAULT_BUFFER_SIZE);
 	if(dyntxmem == NULL)
 	{
+		free(chan);
 		free(dynrxmem);
-		return;
+		return NULL;
 	}
+
 	chan->txwindow.fragments = dyntxmem;
 	chan->rxwindow.fragments = dynrxmem;
 	chan->txwindow.windowsize = 16;
@@ -490,12 +528,21 @@ void ReliableMessageSetup(netreliablemsg_t *chan, int qport, int netsrc, netadr_
 	memset(chan->txwindow.fragments, -1, chan->txwindow.bufferlen * sizeof(fragment_t));
 	memset(chan->rxwindow.fragments, -1, chan->rxwindow.bufferlen * sizeof(fragment_t));
 	memcpy(&chan->remoteAddress, remote, sizeof(netadr_t));
+
+	MSG_Init(&chan->rxwindow.fragmentbuffer, chan->rxwindow.fragmentdata, sizeof(chan->rxwindow.fragmentdata));
+	MSG_Init(&chan->txwindow.fragmentbuffer, chan->txwindow.fragmentdata, sizeof(chan->txwindow.fragmentdata));
+
 	chan->sock = netsrc;
 	chan->qport = qport;
+	return chan;
 }
 
 void ReliableMessageDisconnect(netreliablemsg_t *chan)
 {	
+	if(chan == NULL)
+	{
+		return;
+	}
 	if(chan->txwindow.fragments)
 	{
 		free(chan->txwindow.fragments);
@@ -504,11 +551,15 @@ void ReliableMessageDisconnect(netreliablemsg_t *chan)
 	{
 		free(chan->rxwindow.fragments);
 	}
-	memset(chan, 0, sizeof(netreliablemsg_t));
+	free(chan);
 }
 
 void ReliableMessageSetCurrentTime(netreliablemsg_t *chan, int ftime)
-{	
+{
+	if(chan == NULL)
+	{
+		return;
+	}
 	chan->time = ftime;
 }
 
@@ -522,6 +573,12 @@ void ReliableMessageAddTestData(netreliablemsg_t *chan, int numint)
     int numbytes;
     numbytes = 4 * numint;
     int sentbytes;
+
+    if(chan == NULL)
+    {
+        return;
+    }
+
 
     if(testdata[0] == 0)
     {
@@ -549,9 +606,11 @@ void ReliableMessageGetTestData(netreliablemsg_t *chan)
 	int i;
 	static int verify = 1;
 
-	if(chan->remoteAddress.type <= NA_BAD)
+	if(chan == NULL)
+	{
 		return;
-	
+	}
+
 	int numbytes = ReliableMessageReceive(chan, (byte*)recvdata, sizeof(recvdata));
 
 	if(numbytes > 0)

@@ -21,6 +21,8 @@ typedef struct
 	int windowsize;  //Current size of our window
 	fragment_t *fragments;
 	int packets;
+	msg_t fragmentbuffer;
+	byte fragmentdata[MAX_FRAGMENT_SIZE];
 }framedata_t;
 
 typedef struct
@@ -39,8 +41,7 @@ void ReliableMessagesReceiveNextFragment(netreliablemsg_t *chan, msg_t* buf);
 int ReliableMessageReceive(netreliablemsg_t *chan, byte* outdata, int len);
 int ReliableMessageReceiveSingleFragment(netreliablemsg_t *chan, byte* outdata, int len);
 int ReliableMessageSend(netreliablemsg_t *chan, byte* indata, int len);
-void ReliableMessageSetup(netreliablemsg_t *chan, int netsrc, int qport, netadr_t* remote);
+netreliablemsg_t* ReliableMessageSetup(int netsrc, int qport, netadr_t* remote);
 void Net_TestingFunction(netreliablemsg_t *chan);
 void ReliableMessageDisconnect(netreliablemsg_t *chan);
 void ReliableMessageSetCurrentTime(netreliablemsg_t *chan, int time);
-

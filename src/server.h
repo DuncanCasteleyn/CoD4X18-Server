@@ -70,7 +70,7 @@
 
 
 typedef struct{
-	netreliablemsg_t netstate;
+	netreliablemsg_t *netstate;
 	msg_t recvbuffer;
 }reliableprotocol_t;
 
@@ -169,7 +169,7 @@ typedef struct client_s {//90b4f8c
 	qboolean		needupdate;
 	qboolean		updateconnOK;
 #ifdef COD4X17A
-	byte			dummy767[150];
+	byte			dummy767[44];
 #else
 	reliableprotocol_t	reliablemsg;
 #endif
@@ -179,7 +179,7 @@ typedef struct client_s {//90b4f8c
 	int				steamAuthenticated; //0 = nothing has been arrived yet; -1 = Client auth token has arrived; 1 = Steam auth completed; 2 = User has license as well
 	unsigned int	steamNextAuthAttempt;
 	unsigned int	steamAuthNumAttempts;
-	byte			free[410];
+	byte			free[516];
 
 	char			name[64];		//0x5fc
 
@@ -818,7 +818,7 @@ void SV_Cmd_Init();
 void SV_CopyCvars();
 void SV_SteamData(client_t* cl, msg_t* msg);
 
-void SV_SetupReliableMessageProtocol(client_t* client);
+qboolean SV_SetupReliableMessageProtocol(client_t* client);
 void SV_DisconnectReliableMessageProtocol(client_t* client);
 void SV_ReceiveReliableMessages(client_t* client);
 #ifdef COD4X18UPDATE
